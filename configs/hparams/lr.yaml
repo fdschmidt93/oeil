@@ -1,0 +1,16 @@
+# Carve out `test_split` percent of training data for testing
+test_split: 0.2
+# Regularization parameters
+regularization:
+  type: "l2"
+  # >> see documentation for numpy's logspace
+  log_space_start: -1
+  log_space_end: 1
+  log_space_samples: 100
+# Grid search
+# >> see `scoring` of sklearn `GridSearchCV`
+cv:
+  folds: 10
+  scoring: "f1_macro"
+  verbose: false
+recompute_idf: true

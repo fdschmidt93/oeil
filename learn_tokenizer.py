@@ -12,34 +12,35 @@ from nltk.corpus import stopwords
 
 # prepare filepaths
 CWD = Path.cwd()
-DATA = Path('/work/fabiasch/eia/data')
-SEG = DATA.joinpath("filtered2")
+DATA = Path('./data/summaries')
 
-# prepare tokenizer
-replace_punctuation = [Replace(x, "") for x in punctuation]
-replace_bullet = Replace("·", "")
-replace_digits = [Replace(x, "") for x in digits]
-normalizer = normalizers.Sequence(
-    [NFKC(), Strip(), Lowercase(), *replace_digits, *replace_punctuation, replace_bullet]
-)
-pre_tokenizer = Sequence(
-    [
-        WhitespaceSplit(),
-    ]
-)
-tokenizer = Tokenizer(WordLevel())
-tokenizer.add_special_tokens(['<unk>'])
-trainer = WordLevelTrainer(
-    vocab_size=20_000,
-    special_tokens=["<unk>"],
-)
+def main():
+    # prepare tokenizer
+    replace_punctuation = [Replace(x, "") for x in punctuation]
+    replace_bullet = Replace("·", "")
+    replace_digits = [Replace(x, "") for x in digits]
+    normalizer = normalizers.Sequence(
+        [NFKC(), Strip(), Lowercase(), *replace_digits, *replace_punctuation, replace_bullet]
+    )
+    pre_tokenizer = Sequence(
+        [
+            WhitespaceSplit(),
+        ]
+    )
+    tokenizer = Tokenizer(WordLevel())
+    tokenizer.add_special_tokens(['<unk>'])
+    trainer = WordLevelTrainer(
+        vocab_size=20_000,
+        special_tokens=["<unk>"],
+    )
+    label, _ = read_label("./data/labels.csv")
+    files = [str(x) for x in get_summary_paths(DATA, final_act=False)]
+    files = [file for file in files if any(cod in str(file) for cod in label)]
 
+    tokenizer.pre_tokenizer = pre_tokenizer
+    tokenizer.normalizer = normalizer
+    tokenizer.train(files, trainer)
+    tokenizer.save(f"tokenizer.lr.json", pretty=True)
 
-label, _ = read_label("./label_extra_pos.csv")
-files = [str(x) for x in get_summary_paths(SEG)]
-files = [file for file in files if any(cod in str(file) for cod in label)]
-
-tokenizer.pre_tokenizer = pre_tokenizer
-tokenizer.normalizer = normalizer
-tokenizer.train(files, trainer)
-tokenizer.save(f"tokenizer.lr.json", pretty=True)
+if __name__ == "__main__":
+    main()

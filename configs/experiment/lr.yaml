@@ -1,0 +1,9 @@
+# @package _global_
+
+_target_: src.run.classifier.main
+_convert_: null
+
+# specify here default training configuration
+defaults:
+  - override /model: lr.yaml
+  - override /hparams: lr.yaml

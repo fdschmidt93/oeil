@@ -1,8 +1,11 @@
-from typing import Dict, List, Optional, Tuple, Union
-from pathlib import Path
-from tokenizers import Tokenizer
-import numpy as np
+import logging
 import os
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+from pytorch_lightning.utilities import rank_zero_only
+from tokenizers import Tokenizer
 
 CWD = Path.cwd()
 SEG = CWD.joinpath("segmented")
@@ -11,9 +14,13 @@ UNSEG_YEARS = UNSEG.glob("*")
 
 
 def get_cod(path: Union[str, Path]) -> str:
+    """Get COD from a filepath string."""
     return "/".join(str(path).split("/")[-4:-2])
 
-def filter_paths(values, paths, overlapping_paths):
+
+def filter_paths(
+    values: List[float], paths: List[Path], overlapping_paths: List[str]
+) -> List[float]:
     out_val = []
     cod = [get_cod(p) for p in paths]
     for path in overlapping_paths:
@@ -21,6 +28,7 @@ def filter_paths(values, paths, overlapping_paths):
             idx = cod.index(path)
             out_val.append(values[idx])
     return out_val
+
 
 def read_embeddings(
     path: Union[str, Path], n_tokens: int = 200_000
@@ -57,6 +65,19 @@ def get_tokenizer_emb(
 
 
 def read_label(path: str, delimiter: str = ",") -> Tuple[Dict[str, int], np.ndarray]:
+    """
+    Reads the label from a csv-file into a dictionary of {COD: label} and np array of labels
+
+    File example:
+
+    Procedure,Category
+    2010/0004(COD),-1
+    2010/0258(COD),-1
+    2014/0034(COD),-1
+    2011/0411(COD),1
+    2017/0220(COD),1
+    """
+
     label = {}
     with open(path, "r") as file:
         # skip header
@@ -68,13 +89,15 @@ def read_label(path: str, delimiter: str = ",") -> Tuple[Dict[str, int], np.ndar
     return label, y
 
 
-def filter_labels(file_paths: List[Path], labels: Dict[str, int]):
+def filter_labels(
+    file_paths: List[Path], labels: Dict[str, int]
+) -> Tuple[List[Path], List[Path]]:
+    """Separates file paths into file paths for labelled and unlabelled COD."""
     label_cod = list(labels.keys())
     non_label_paths = [
         path for path in file_paths if not any(cod in str(path) for cod in label_cod)
     ]
     label_paths = [path for cod in label_cod for path in file_paths if cod in str(path)]
-    # breakpoint()
     assert len(labels) == len(label_paths)
     return label_paths, non_label_paths
 
@@ -114,26 +137,24 @@ def tokenize_to_vec(document: List[str], tokenizer: Tokenizer):
     """Tokenize document, unpack tokens, and return counts."""
     vector = np.zeros(tokenizer.get_vocab_size(), dtype=np.float32)
     encodings = tokenizer.encode_batch(document, add_special_tokens=False)
-    # if isinstance(encodings, list):
-    #     if len(encodings) == 1:
-    #         encodings = encodings[0]
-    #     else:
-    #         raise Exception('not working')
     ids, counts = np.unique(
         [id_ for x in encodings for id_ in x.ids], return_counts=True
     )
     try:
         counts[0] = 0
     except:
+        import pudb
+
         pu.db
     vector[ids] = counts
     return vector
 
 
-def get_summary_paths(folder: Path, final_act: bool = True) -> List[Path]:
+def get_summary_paths(folder: str, final_act: bool = True) -> List[Path]:
     # generate file paths
-    filetype = 'legislative_proposal' if not final_act else 'final_act'
-    file_glob = 'sum_' + filetype + '_*'
+    folder = Path(folder)
+    filetype = "legislative_proposal" if not final_act else "final_act"
+    file_glob = "sum_" + filetype + "_*"
     files = []
     years = folder.glob("*")
     for year in years:
@@ -148,11 +169,11 @@ def get_summary_paths(folder: Path, final_act: bool = True) -> List[Path]:
                 filepath = proposals[arr.argmax()]
                 try:
                     if os.stat(str(filepath)).st_size == 0:
-                        filepath = proposals[arr.argsort()[-2]] 
+                        filepath = proposals[arr.argsort()[-2]]
                         if os.stat(str(filepath)).st_size == 0:
-                            filepath = proposals[arr.argsort()[-3]] 
+                            filepath = proposals[arr.argsort()[-3]]
                             if os.stat(str(filepath)).st_size == 0:
-                                filepath = proposals[arr.argsort()[-4]] 
+                                filepath = proposals[arr.argsort()[-4]]
                     files.append(filepath)
                 except:
                     pass
@@ -162,7 +183,6 @@ def get_summary_paths(folder: Path, final_act: bool = True) -> List[Path]:
 def read_summaries(
     folder: Path,
     filter_cod: Optional[List[str]] = None,
-    tokenizer: Optional[Tokenizer] = None,
 ):
     files = get_summary_paths(folder)
 
@@ -175,7 +195,23 @@ def read_summaries(
     return files
 
 
-# label = read_label("./label.csv")
-# filter_cod = list(label.keys())
-# folder = SEG
-# print([cod for cod in filter_cod if not any(cod in str(file) for file in files)])
+def get_logger(name=__name__, level=logging.INFO) -> logging.Logger:
+    """Initializes multi-GPU-friendly python logger."""
+
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+
+    # this ensures all logging levels get marked with the rank zero decorator
+    # otherwise logs would get multiplied for each GPU process in multi-GPU setup
+    for level in (
+        "debug",
+        "info",
+        "warning",
+        "error",
+        "exception",
+        "fatal",
+        "critical",
+    ):
+        setattr(logger, level, rank_zero_only(getattr(logger, level)))
+
+    return logger

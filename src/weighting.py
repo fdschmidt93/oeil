@@ -1,11 +1,13 @@
-import numpy as np
 from typing import Optional, Tuple
+
+import numpy as np
 
 
 def z_norm(
-        x: np.ndarray,
-        stats: Optional[Tuple[np.ndarray, np.ndarray]] = None,
-        return_stats: bool = False) -> np.ndarray:
+    x: np.ndarray,
+    stats: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    return_stats: bool = False,
+) -> np.ndarray:
     if stats is None:
         mean = x.mean(0, keepdims=True)
         std = x.std(0, keepdims=True)
@@ -17,7 +19,9 @@ def z_norm(
         return np.nan_to_num((x - mean) / std)
 
 
-def tf_idf(x: np.ndarray, idf: Optional[np.ndarray] = None, return_idf: bool = False) -> np.ndarray:
+def tf_idf(
+    x: np.ndarray, idf: Optional[np.ndarray] = None, return_idf: bool = False
+) -> np.ndarray:
     N = x.shape[0]
     tf = (1 + np.maximum(np.log(x), 0)) / (1 + np.log(np.max(x, 1, keepdims=True)))
     if idf is None:
@@ -25,7 +29,7 @@ def tf_idf(x: np.ndarray, idf: Optional[np.ndarray] = None, return_idf: bool = F
         idf = np.log(N / df)
         df_zeros = df == 0
         idf[df_zeros] = 0
-    tfidf =  tf * idf
+    tfidf = tf * idf
     if return_idf:
         return tfidf, idf
     else:
@@ -82,10 +86,12 @@ def sif(
     else:
         return sent_emb, None
 
+
 def min_max_norm(x: np.ndarray) -> np.ndarray:
     min_ = x.min(keepdims=True)
     max_ = x.max(keepdims=True)
     return (x - min_) / (max_ - min_)
+
 
 def average_cos_sim(inputs: np.ndarray, ref: np.ndarray) -> np.ndarray:
     l2norm = lambda x: x / np.linalg.norm(x, axis=-1, ord=2, keepdims=True)

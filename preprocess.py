@@ -4,11 +4,6 @@ from typing import List, Optional, Union
 
 from Levenshtein import StringMatcher
 
-# def read_file(path):
-#     with open(path, "r") as file:
-#         return " ".join(file.readlines()).strip()
-
-
 keep_summary = [
     "PURPOSE",
     "PROPOSED ACT",
@@ -48,25 +43,6 @@ def compare(
             return candidates
         return None
 
-# def parse_document(
-#     document: str, keep, keep_after_content: bool = False, edit_distance: int = 0
-# ):
-#     out = []
-#     splitted = re.split("([A-Z ]+:.)", document)
-#     re.split("[A-Z ]+:.", document)
-#     for i, split in enumerate(splitted):
-#         test_split = split.replace(":", "").strip()
-#         if keep_after_content:
-#             # if "CONTENT" in split:
-#             if compare("CONTENT", test_split, edit_distance):
-#                 out.append(" ".join(splitted[i:]).strip())
-#                 break
-#         if compare(test_split, keep, edit_distance):
-#             try:
-#                 out.append((splitted[i] + splitted[i + 1]).strip())
-#             except IndexError:
-#                 out.append(splitted[i].strip())
-#     return " ".join(out)
 
 def parse_document(
     document: str, keep, keep_after_content: bool = False, edit_distance: int = 0
@@ -81,7 +57,7 @@ def parse_document(
             match = compare(test_split, "CONTENT", edit_distance)
             if isinstance(match, str):
                 match += ": "
-                match += " ".join(splitted[i+1:]).strip()
+                match += " ".join(splitted[i + 1 :]).strip()
                 out.append(match)
                 break
         match = compare(test_split, keep, edit_distance)
@@ -92,11 +68,6 @@ def parse_document(
             except IndexError:
                 out.append(splitted[i].strip())
     return " ".join(out)
-
-CWD = Path("/work/fabiasch/eia/data")
-SEG = CWD.joinpath("filtered")
-UNSEG = CWD.joinpath("unsegmented")
-UNSEG_YEARS = UNSEG.glob("*")
 
 
 def read_file(path) -> str:
@@ -111,35 +82,40 @@ def write_file(text, path: Path) -> None:
         file.write(text)
 
 
-file_path = "../data/unsegmented/2012/0003(COD)/sum/sum_final_act_1.txt"
-document = read_file(file_path)
-parsed = parse_document(document, keep_final_act, edit_distance=2)
+def main(path: str = "./data/summaries"):
+    summaries = Path(path)
+    assert summaries.exists(), "Check that you are pointing to the right folder!"
+    years = Path(summaries).glob("*")
+    for year in years:
+        print(f"Processing {year}")
+        codes = year.glob("*")
+        for code in codes:
+            sum_path = code.joinpath("sum")
+            txt_files = sum_path.glob("*.txt")
+            for file_path in txt_files:
+                if any(
+                    x in str(file_path) for x in ["final_act", "legislative_proposal"]
+                ):
+
+                    # replace non-breaking space if in there
+                    text = read_file(file_path).replace("\xa0", " ")
+                    text = parse_document(
+                        text,
+                        keep=keep_summary
+                        if "legislative_proposal" in str(file_path)
+                        else keep_final_act,
+                        keep_after_content=True,
+                        edit_distance=2,
+                    )
+                    if text == " " or text == "":
+                        pass
+                    target_path = Path(
+                        str(file_path).replace("unsegmented", "filtered2")
+                    )
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    write_file(text, target_path)
+    print("Finished filtering summaries!")
 
 
-years = UNSEG.glob("*")
-for year in years:
-    codes = year.glob("*")
-    for code in codes:
-        sum_path = code.joinpath("sum")
-        txt_files = sum_path.glob("*.txt")
-        for file_path in txt_files:
-            if any(x in str(file_path) for x in ["final_act", "legislative_proposal"]):
-                
-                # replace non-breaking space if in there
-                text = read_file(file_path).replace('\xa0', ' ')
-                text = parse_document(
-                    text,
-                    keep=keep_summary
-                    if "legislative_proposal" in str(file_path)
-                    else keep_final_act,
-                    keep_after_content=True,
-                    edit_distance=2
-                )
-                if text == " " or text == "":
-                    pass
-                target_path = Path(str(file_path).replace("unsegmented", "filtered2"))
-                target_path.parent.mkdir(parents=True, exist_ok=True)
-                write_file(text, target_path)
-        print(f"Completed {year.suffix}/{code.suffix}")
-
-
+if __name__ == "__main__":
+    main()

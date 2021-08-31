@@ -6,14 +6,15 @@
     - [x] CLI
     - [ ] Documentation: 80% done
     - [ ] Even more aggressive modularization
-    - [ ] Add preprocessing shell script and raw data
-    - [ ] Verify experiments fully reproducible
+    - [x] Add preprocessing shell script and raw data
+    - [ ] Verify experiments fully reproducible: old numbers roughly reproducible, though now new, better performing and reproducible numbers 
     - [ ] Pull in Leiden's analysis code
     - [ ] Test on Windows
+    - [ ] Snapshot of data (in particular proposals/final acts before and after preprocessing validating our approach)
 
 * Once final acts annotations are available
     - [ ] Migrate transformers pipeline
-    - [ ] Comparatively evaluate generalization of scaling from LP-only to LP+FA
+    - [x] Comparatively evaluate generalization of scaling from LP-only to LP+FA
 
 # OEIL
 

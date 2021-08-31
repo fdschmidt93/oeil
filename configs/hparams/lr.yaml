@@ -13,4 +13,9 @@ cv:
   folds: 10
   scoring: "f1_macro"
   verbose: false
+test_lp: true
+test_fa: true
+join_validation_data: true
+# recomputing idf for final acts stand-alone rather than
+# using idf of legislative proposals for final acts
 recompute_idf: true

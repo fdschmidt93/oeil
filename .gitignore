@@ -1,4 +1,6 @@
 *.pyc
 
+old/
 data/summaries/
-outputs/
+*.bin
+*.tar.gz

@@ -90,10 +90,13 @@ def read_label(path: str, delimiter: str = ",") -> Tuple[Dict[str, int], np.ndar
 
 
 def filter_labels(
-    file_paths: List[Path], labels: Dict[str, int]
+    file_paths: List[Path], labels: Union[List, Dict[str, int]]
 ) -> Tuple[List[Path], List[Path]]:
     """Separates file paths into file paths for labelled and unlabelled COD."""
-    label_cod = list(labels.keys())
+    if isinstance(labels, dict):
+        label_cod = list(labels.keys())
+    else:
+        label_cod = labels
     non_label_paths = [
         path for path in file_paths if not any(cod in str(path) for cod in label_cod)
     ]
@@ -133,10 +136,10 @@ def tokenize(inputs: List[List[str]], tokenizer: Tokenizer) -> np.ndarray:
     return tokens[tokens > 0]
 
 
-def tokenize_to_vec(document: List[str], tokenizer: Tokenizer):
+def tokenize_to_vec(document: List[str], tokenizer: Tokenizer, N: int):
     """Tokenize document, unpack tokens, and return counts."""
-    vector = np.zeros(tokenizer.get_vocab_size(), dtype=np.float32)
-    encodings = tokenizer.encode_batch(document, add_special_tokens=False)
+    vector = np.zeros(N, dtype=np.float32)
+    encodings = tokenizer.encode_batch(document, add_special_tokens=True)
     ids, counts = np.unique(
         [id_ for x in encodings for id_ in x.ids], return_counts=True
     )
@@ -150,7 +153,7 @@ def tokenize_to_vec(document: List[str], tokenizer: Tokenizer):
     return vector
 
 
-def get_summary_paths(folder: str, final_act: bool = True) -> List[Path]:
+def get_summary_paths(folder: str, final_act: bool = False) -> List[Path]:
     # generate file paths
     folder = Path(folder)
     filetype = "legislative_proposal" if not final_act else "final_act"
@@ -181,8 +184,7 @@ def get_summary_paths(folder: str, final_act: bool = True) -> List[Path]:
 
 
 def read_summaries(
-    folder: Path,
-    filter_cod: Optional[List[str]] = None,
+    folder: Path, filter_cod: Optional[List[str]] = None,
 ):
     files = get_summary_paths(folder)
 

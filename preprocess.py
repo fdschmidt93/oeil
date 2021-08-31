@@ -49,7 +49,6 @@ def parse_document(
 ):
     out = []
     splitted = re.split("([A-Z ]+:.)", document)
-    test_splitted = [x.replace(":", "").strip() for x in splitted]
     for i, split in enumerate(splitted):
         test_split = split.replace(":", "").strip()
         if keep_after_content:
@@ -82,7 +81,8 @@ def write_file(text, path: Path) -> None:
         file.write(text)
 
 
-def main(path: str = "./data/summaries"):
+def main(path: str = "./data/summaries/raw"):
+    i = 0
     summaries = Path(path)
     assert summaries.exists(), "Check that you are pointing to the right folder!"
     years = Path(summaries).glob("*")
@@ -96,25 +96,29 @@ def main(path: str = "./data/summaries"):
                 if any(
                     x in str(file_path) for x in ["final_act", "legislative_proposal"]
                 ):
-
                     # replace non-breaking space if in there
-                    text = read_file(file_path).replace("\xa0", " ")
-                    text = parse_document(
-                        text,
+                    raw_text = read_file(file_path).replace("\xa0", " ")
+                    alen = len(raw_text)
+                    preprocessed_text = parse_document(
+                        raw_text,
                         keep=keep_summary
                         if "legislative_proposal" in str(file_path)
                         else keep_final_act,
                         keep_after_content=True,
                         edit_distance=2,
                     )
-                    if text == " " or text == "":
+                    new_alen = len(preprocessed_text)
+                    print(f"Removed {alen-new_alen} chars for {file_path}")
+                    # if alen-new_alen < 0:
+                    #     import pudb
+                    #     pu.db
+                    if preprocessed_text == " " or preprocessed_text == "":
                         pass
-                    target_path = Path(
-                        str(file_path).replace("unsegmented", "filtered2")
-                    )
+                    target_path = Path(str(file_path).replace("raw", "preprocessed"))
                     target_path.parent.mkdir(parents=True, exist_ok=True)
-                    write_file(text, target_path)
-    print("Finished filtering summaries!")
+                    write_file(preprocessed_text, target_path)
+                    i += 1
+    print(f"Finished filtering summaries! Processed {i} files")
 
 
 if __name__ == "__main__":

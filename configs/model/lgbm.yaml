@@ -1,0 +1,3 @@
+_target_: lightgbm.LGBMClassifier
+
+random_state: ${seed}

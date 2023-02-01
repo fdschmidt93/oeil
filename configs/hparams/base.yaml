@@ -1,0 +1,9 @@
+# Carve out `test_split` percent of training data for testing
+tfidf: true
+test_split: 0.2
+test_lp: true
+test_fa: true
+join_validation_data: true
+# recomputing idf for final acts stand-alone rather than
+# using idf of legislative proposals for final acts
+recompute_idf: false

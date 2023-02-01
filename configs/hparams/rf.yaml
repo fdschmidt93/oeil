@@ -1,0 +1,23 @@
+defaults:
+  - base
+
+tuning:
+  _target_: sklearn.model_selection.GridSearchCV
+  param_grid:
+    criterion: 
+      - "gini"
+      - "entropy"
+    max_depth:
+      - 1
+      - 2
+      - 5
+      - 10
+    n_estimators:
+      - 2
+      - 5
+      - 10
+      - 25
+      - 50
+  scoring: "f1_macro"
+  cv: 10
+  verbose: false

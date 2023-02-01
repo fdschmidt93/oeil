@@ -3,11 +3,12 @@ import pickle
 from pathlib import Path
 
 import hydra
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
 from pycm import ConfusionMatrix
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve
 from sklearn.model_selection import GridSearchCV, train_test_split
 from tokenizers import Tokenizer
 
@@ -113,7 +114,10 @@ def main(config: DictConfig):
 
     # 3. COMPUTE TF IDF WEIGHTS
     #   Compute tf-idf weighted token counts for classifier
-    X_lp_all, lp_idf = tf_idf(lp_token_counts, return_idf=True)
+    if "tfidf" in config.hparams and config.hparams.tfidf:
+        X_lp_all, lp_idf = tf_idf(lp_token_counts, return_idf=True)
+    else:
+        X_lp_all = lp_token_counts
     lp_tfidf = pd.DataFrame(index=lp_train_other_cod, data=X_lp_all, columns=tokens)
     lp_tfidf.to_csv("lp_tfidf.csv")
 
@@ -129,75 +133,45 @@ def main(config: DictConfig):
         random_state=config.seed,
         stratify=y,
     )
-    # CV: exhaustive l2 parameter tuning
-    C = np.logspace(
-        config.hparams.regularization.log_space_start,
-        config.hparams.regularization.log_space_end,
-        config.hparams.regularization.log_space_samples,
-    )
-    penalty = [config.hparams.regularization.type]
-    hparams = {"C": C, "penalty": penalty}
     model = hydra.utils.instantiate(config.model)
-    # stratified cross-val of hyperparams
-    clf = GridSearchCV(
-        model,
-        hparams,
-        cv=config.hparams.cv.folds,
-        verbose=config.hparams.cv.verbose,
-        scoring=config.hparams.cv.scoring,
-    )
-    clf.fit(X_train, y_train)
-    # clf.fit(X_lp_train, y)
+    if "hparams" in config and "tuning" in config.hparams:
+        # stratified cross-val of hyperparams
+        model = hydra.utils.call(config.hparams.tuning, model, _convert_="all")
+        # model.fit(X_train, y_train)
+        model.fit(X_lp_train, y)
+        # clf.fit(X_lp_train, y)
 
-    # best model
-    log.info(
-        f"The best found hyperparameters for your configuration: {clf.best_params_}"
-    )
-    log.info(
-        f"The Cross-Validation {config.hparams.cv.scoring} for the hyperparameters: {100*clf.best_score_:0.1f}%"
-    )
-    X_test_preds = clf.predict(X_test)
-    log.info("Performance on held out subset from training data:")
-    log.info(classification_report(y_test, X_test_preds))
-    ConfusionMatrix(actual_vector=y_test, predict_vector=X_test_preds).print_matrix()
-
-    # model = hydra.utils.instantiate(config.model)
-    # clf = GridSearchCV(
-    #     model,
-    #     hparams,
-    #     cv=config.hparams.cv.folds,
-    #     verbose=config.hparams.cv.verbose,
-    #     scoring=config.hparams.cv.scoring,
-    # )
-    log.info(
-        f"The best found hyperparameters for your configuration: {clf.best_params_}"
-    )
-    log.info(
-        f"The Cross-Validation {config.hparams.cv.scoring} for the hyperparameters: {100*clf.best_score_:0.1f}%"
-    )
-    log.info("Retraining with full annotations!")
-    clf.fit(X_lp_train, y)
-    log.info(
-        f"The best found hyperparameters for your configuration: {clf.best_params_}"
-    )
-    log.info(
-        f"The Cross-Validation {config.hparams.cv.scoring} for the hyperparameters: {100*clf.best_score_:0.1f}%"
-    )
+        # best model
+        log.info(
+            f"The best found hyperparameters for your configuration: {model.best_params_}"
+        )
+        log.info(
+            f"The Cross-Validation {config.hparams.tuning.scoring} for the hyperparameters: {100*model.best_score_:0.1f}%"
+        )
+        # X_test_preds = model.predict(X_test)
+        # log.info("Performance on held out subset from training data:")
+        # log.info(classification_report(y_test, X_test_preds))
+        # ConfusionMatrix(
+        #     actual_vector=y_test, predict_vector=X_test_preds
+        # ).print_matrix()
+    else:
+        log.info("(Re-)Training with full annotations!")
+        model.fit(X_lp_train, y)
     with open("classifier.model.bin", "wb") as file:
-        pickle.dump(clf, file)
+        pickle.dump(model, file)
     log.info("Fully retrained and model stored!")
 
     # # analyse tokens
-    if hasattr(clf.best_estimator_, "coef_"):
-        weights = clf.best_estimator_.coef_.reshape(-1)
+    if hasattr(model, "best_estimator_") and hasattr(model, "coef_"):
+        weights = model.best_estimator_.coef_.reshape(-1)
         token_weights = pd.DataFrame(
             index=tokens, data=weights, columns=["Coefficient"]
         )
         token_weights.to_csv("coef_by_token.csv")
         log.info("Coefficients by token stored!")
 
-    x_other_preds = clf.predict(X_lp_other)
-    x_other_probs = np.around(clf.predict_proba(X_lp_other)[:, 1], 2)
+    x_other_preds = model.predict(X_lp_other)
+    x_other_probs = np.around(model.predict_proba(X_lp_other)[:, 1], 2)
 
     lp_other_cod = [get_cod(p) for p in lp_other_paths]
     out = {
@@ -224,7 +198,10 @@ def main(config: DictConfig):
         X_fa = tf_idf(fa_token_counts)
         log.info("Reweighted final act TF-IDF!")
     else:
-        X_fa = tf_idf(fa_token_counts, idf=lp_idf)
+        if "tfidf" in config.hparams and config.hparams.tfidf:
+            X_fa = tf_idf(fa_token_counts, idf=lp_idf)
+        else:
+            X_fa = fa_token_counts
 
     if config.hparams.test_lp:
         lp_validation_data = pd.read_csv(data.joinpath("lp_validation_data.csv"))
@@ -234,22 +211,35 @@ def main(config: DictConfig):
             how="inner",
             on="COD",
         )
-        ConfusionMatrix(
+        cm = ConfusionMatrix(
             actual_vector=validated_df["LP_Coder_1"].values,
             predict_vector=validated_df["LR_Predictions"].values,
-        ).print_matrix()
+        )
+        cm.print_matrix()
+        with open("lr_validation_results.txt", "w") as file:
+            file.write(cm.__str__())
+
         # import pudb
         # pu.db
+        fpr, tpr, _ = roc_curve(
+            validated_df["LP_Coder_1"].values, validated_df["LR_Probabilities"].values
+        )
+        auc = roc_auc_score(
+            validated_df["LP_Coder_1"].values, validated_df["LR_Probabilities"].values
+        )
+        plt.plot(fpr, tpr, label="data 1, auc=" + str(auc))
+        plt.legend(loc=4)
+        plt.savefig("validation_lp_roc.png")
 
     fa_tfidf = pd.DataFrame(index=fa_cod, data=X_fa, columns=tokens)
     fa_tfidf.to_csv(f"fa_tfidf_recompute-idf_{config.hparams.recompute_idf}.csv")
 
     #   Predicting estimates and classes for both proposals and final acts
     log.info("Files loaded.. predicting!")
-    lp_preds = clf.predict(X_lp_all)
-    lp_probs = np.around(clf.predict_proba(X_lp_all)[:, 1], 2)
-    fa_preds = clf.predict(X_fa)
-    fa_probs = np.around(clf.predict_proba(X_fa)[:, 1], 2)
+    lp_preds = model.predict(X_lp_all)
+    lp_probs = np.around(model.predict_proba(X_lp_all)[:, 1], 2)
+    fa_preds = model.predict(X_fa)
+    fa_probs = np.around(model.predict_proba(X_fa)[:, 1], 2)
 
     #   Get the overlapping paths
     overlapping_paths = list(set(lp_train_other_cod).intersection(set(fa_cod)))
@@ -282,10 +272,26 @@ def main(config: DictConfig):
         )
         # import pudb
         # pu.db
-        ConfusionMatrix(
+        cm = ConfusionMatrix(
             actual_vector=validated_df["FA_Coder_1"].values,
             predict_vector=validated_df["LR_Final_Act_Prediction"].values,
-        ).print_matrix()
+        )
+        cm.print_matrix()
+        with open("fa_validation_results.txt", "w") as file:
+            file.write(cm.__str__())
+
+        # if "analysis" in config:
+        fpr, tpr, _ = roc_curve(
+            validated_df["FA_Coder_1"].values,
+            validated_df["LR_Final_Act_Probability"].values,
+        )
+        auc = roc_auc_score(
+            validated_df["FA_Coder_1"].values,
+            validated_df["LR_Final_Act_Probability"].values,
+        )
+        plt.plot(fpr, tpr, label="data 1, auc=" + str(auc))
+        plt.legend(loc=4)
+        plt.savefig("validation_fa_roc.png")
 
     if (
         config.hparams.join_validation_data
